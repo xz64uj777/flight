@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>Copter Flight</title>
+<style>
+:root {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #e8eef6;
+  --accent: #e8c84a;
+  --panel: rgba(8, 14, 24, 0.72);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0a1220; touch-action: none; }
+#app { position: relative; width: 100%; height: 100%; overflow: hidden; user-select: none; }
+.hangar {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; padding: 1.5rem; text-align: center; gap: 1rem;
+  background: radial-gradient(ellipse at 50% 20%, #1a3358 0%, transparent 55%),
+    linear-gradient(180deg, #0a1220 0%, #1a2230 55%, #3a3228 100%);
+}
+.hangar h1 { margin: 0; font-size: clamp(1.6rem, 6vw, 2.4rem); letter-spacing: .04em; }
+.hangar p { margin: 0; max-width: 28rem; opacity: .8; line-height: 1.45; font-size: .95rem; }
+.fly-btn {
+  margin-top: .75rem; border: none; border-radius: 999px; padding: 1rem 2.75rem;
+  font-size: 1.35rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
+  background: linear-gradient(180deg, #f0d45a, #c9a020); color: #1a1408;
+  box-shadow: 0 8px 28px rgba(232,200,74,.35); cursor: pointer;
+}
+.fly-btn:active { transform: scale(.97); }
+.opt-row { display: flex; gap: .4rem; margin-top: .35rem; flex-wrap: wrap; justify-content: center; }
+.sens { width: min(92vw, 22rem); text-align: left; font-size: .78rem; opacity: .9; }
+.sens label { display: flex; justify-content: space-between; margin-top: .35rem; }
+.sens input { width: 100%; }
+.collbar-wrap { margin-top: .25rem; width: 7.4rem; height: .42rem; background: rgba(255,255,255,.12); border-radius: 99px; overflow: hidden; }
+.collbar { height: 100%; width: 0; background: #5ddea8; }
+.quality-row { display: flex; gap: .4rem; margin-top: .5rem; }
+.quality-row button, .hud-actions button {
+  background: var(--panel); border: 1px solid rgba(255,255,255,.15); color: #cfe0f4;
+  border-radius: 8px; padding: .4rem .75rem; font-size: .8rem; cursor: pointer;
+}
+.quality-row button.active { border-color: var(--accent); color: var(--accent); }
+.flight { position: relative; width: 100%; height: 100%; }
+.flight canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.hud {
+  position: absolute; top: 0; left: 0; right: 0; display: flex;
+  justify-content: space-between; align-items: flex-start;
+  padding: max(.6rem, env(safe-area-inset-top)) .75rem 0; pointer-events: none; gap: .5rem;
+}
+.hud-panel {
+  background: var(--panel); backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,.08); border-radius: 12px;
+  padding: .45rem .7rem; font-variant-numeric: tabular-nums;
+  font-size: clamp(.75rem, 2.8vw, .95rem); line-height: 1.35;
+}
+.hud-panel strong { color: var(--accent); }
+.hud-actions { pointer-events: auto; display: flex; flex-direction: column; gap: .35rem; }
+.hud-actions button { border-radius: 10px; padding: .45rem .65rem; white-space: nowrap; }
+.msg {
+  position: absolute; top: 4.5rem; left: 50%; transform: translateX(-50%);
+  background: var(--panel); padding: .4rem .85rem; border-radius: 999px;
+  font-size: .8rem; max-width: 90%; text-align: center; pointer-events: none;
+  border: 1px solid rgba(255,255,255,.1);
+}
+.msg.warn { color: #ff8a7a; border-color: rgba(255,100,80,.35); }
+.controls {
+  position: absolute; left: 0; right: 0; bottom: 0; height: min(42vh, 280px);
+  pointer-events: none; padding: 0 .5rem max(.5rem, env(safe-area-inset-bottom));
+  display: flex; justify-content: space-between; align-items: flex-end;
+}
+.stick, .collective { pointer-events: auto; position: relative; touch-action: none; }
+.stick {
+  width: min(42vw, 160px); height: min(42vw, 160px); border-radius: 50%;
+  background: rgba(8,14,24,.45); border: 2px solid rgba(255,255,255,.18);
+}
+.stick-knob {
+  position: absolute; width: 44%; height: 44%; border-radius: 50%;
+  background: rgba(232,200,74,.85); border: 2px solid rgba(255,255,255,.35);
+  left: 50%; top: 50%; transform: translate(-50%,-50%);
+}
+.right-pad { display: flex; gap: .6rem; align-items: flex-end; }
+.yaw-stick { width: min(28vw, 110px); height: min(28vw, 110px); }
+.collective {
+  width: min(16vw, 56px); height: min(42vw, 160px); border-radius: 16px;
+  background: rgba(8,14,24,.45); border: 2px solid rgba(255,255,255,.18);
+}
+.collective-knob {
+  position: absolute; left: 8%; right: 8%; height: 18%; border-radius: 10px;
+  background: rgba(93,222,168,.9); border: 2px solid rgba(255,255,255,.3);
+  transform: translateY(-50%); top: 50%;
+}
+.tilt-on #cyclic { outline: 2px solid rgba(232,200,74,.45); }
+.mark { position: absolute; left: 18%; right: 18%; height: 2px; background: rgba(255,255,255,.25); top: 50%; pointer-events: none; }
+.hint {
+  position: absolute; bottom: min(44vh, 290px); left: 50%; transform: translateX(-50%);
+  font-size: .68rem; opacity: .55; pointer-events: none; text-align: center; max-width: 95%;
+}
+.hidden { display: none !important; }
+
+@media (max-width: 720px) and (min-height: 700px) {
+  .stick { width: min(36vw, 140px); height: min(36vw, 140px); }
+  .yaw-stick { width: min(26vw, 100px); height: min(26vw, 100px); }
+  .collective { width: min(14vw, 48px); height: min(36vw, 150px); }
+  .hud-actions button { font-size: .7rem; padding: .35rem .5rem; }
+}
+@media (min-width: 721px) {
+  .controls {
+    height: min(36vh, 260px);
+    padding: 0 1.25rem max(.75rem, env(safe-area-inset-bottom));
+  }
+  .stick { width: min(22vw, 180px); height: min(22vw, 180px); }
+  .yaw-stick { width: min(14vw, 130px); height: min(14vw, 130px); }
+  .collective { width: min(6vw, 64px); height: min(22vw, 180px); }
+  .hint { bottom: min(38vh, 270px); }
+  .hud-panel { font-size: 1rem; }
+}
+@media (horizontal-viewport-segments: 2) {
+  .controls { justify-content: space-between; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="hangar" class="hangar">
+    <h1>COPTER FLIGHT</h1>
+    <p>Phone-friendly helicopter feel — collective lift, cyclic tilt, yaw pedals, hover band &amp; ground effect. Merged from copter-best into flight.</p>
+    <button class="fly-btn" id="flyBtn">Fly</button>
+    <div class="quality-row">
+      <button data-q="low">low</button>
+      <button data-q="med" class="active">med</button>
+      <button data-q="high">high</button>
+    </div>
+    <div class="opt-row">
+      <button type="button" id="hangarTilt">Tilt: off</button>
+      <button type="button" id="hangarCal">Calibrate tilt</button>
+      <button type="button" id="hangarInv">Invert: on</button>
+    </div>
+    <div class="sens">
+      <label>Tilt sens <span id="tiltSensLbl">18°</span></label>
+      <input id="tiltSens" type="range" min="8" max="40" value="18" />
+      <label>Throttle sens <span id="collSensLbl">1.0×</span></label>
+      <input id="collSens" type="range" min="4" max="20" value="10" />
+    </div>
+    <p id="tiltHint" style="font-size:.75rem;opacity:.55;margin-top:1rem">Tilt option for cyclic · yaw on screen · throttle springs back</p>
+  </div>
+  <div id="flight" class="flight hidden">
+    <canvas id="cv"></canvas>
+    <div class="hud">
+      <div class="hud-panel" id="hudPanel"></div>
+      <div class="hud-actions">
+        <button id="camBtn">Cam · chase</button>
+        <button id="qBtn">Q · med</button>
+        <button id="tiltBtn">Tilt: off</button>
+        <button id="calBtn">Calibrate</button>
+        <button id="invBtn">Invert: on</button>
+        <button id="resetBtn">Reset</button>
+        <button id="hangarBtn">Hangar</button>
+      </div>
+    </div>
+    <div id="msg" class="msg hidden"></div>
+    <div class="hint">Tilt or left stick cyclic · yaw pad · throttle springs to center · R/F coll</div>
+    <div class="controls">
+      <div class="stick" id="cyclic"><div class="stick-knob"></div></div>
+      <div class="right-pad">
+        <div class="stick yaw-stick" id="yaw"><div class="stick-knob"></div></div>
+        <div class="collective" id="coll"><div class="mark"></div><div class="collective-knob"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+const GRAVITY=9.81,MASS=2200,MAX_THRUST=MASS*GRAVITY*1.48,HOVER_COLLECTIVE=0.72;
+const GE_HEIGHT=8,GE_BONUS=0.18,PITCH_RATE=0.85,ROLL_RATE=1.1,YAW_RATE=1.05;
+const DRAG_H=0.55,DRAG_V=2.4,SETTLE=0.35,SKID_H=1.4,LAND_SPRING=18000,LAND_DAMP=4200,FRICTION=8;
+const PAD_X=0,PAD_Z=0,PAD_R=18;
+const QUALITY={
+  low:{trees:12,buildings:6,particles:0,shadows:false,groundDetail:8},
+  med:{trees:28,buildings:12,particles:24,shadows:true,groundDetail:14},
+  high:{trees:48,buildings:20,particles:48,shadows:true,groundDetail:22}
+};
+const CAM_ORDER=['chase','pad','orbit'];
+function clamp(v,lo,hi){return v<lo?lo:v>hi?hi:v}
+function wrapAngle(a){const tau=Math.PI*2;let x=((a+Math.PI)%tau);if(x<0)x+=tau;return x-Math.PI}
+function lerp(a,b,t){return a+(b-a)*t}
+function headingDeg(yaw){let d=((yaw*180)/Math.PI)%360;if(d<0)d+=360;return d}
+
+function createHeli(){return{x:0,y:SKID_H,z:0,vx:0,vy:0,vz:0,pitch:0,roll:0,yaw:0,onGround:true,rotorRpm:0.15}}
+function createCam(){return{x:0,y:8,z:-22,yaw:0,pitch:-0.28,dist:28,orbitAng:null}}
+function emptyControls(){return{cyclicPitch:0,cyclicRoll:0,collective:0.35,yaw:0}}
+
+function stepHeli(h,c,dt){
+  const dtC=clamp(dt,0,0.05);
+  const wantRpm=0.2+c.collective*0.8;
+  h.rotorRpm+=(wantRpm-h.rotorRpm)*(1-Math.exp(-3.5*dtC));
+  h.pitch+=c.cyclicPitch*PITCH_RATE*dtC;
+  h.roll+=c.cyclicRoll*ROLL_RATE*dtC;
+  const yawCmd=c.yaw*YAW_RATE+c.collective*0.08*c.cyclicRoll;
+  h.yaw=wrapAngle(h.yaw+yawCmd*dtC);
+  h.pitch=clamp(h.pitch,-0.55,0.55);
+  h.roll=clamp(h.roll,-0.7,0.7);
+  if(Math.abs(c.cyclicPitch)<0.05) h.pitch*=Math.exp(-0.35*dtC);
+  if(Math.abs(c.cyclicRoll)<0.05) h.roll*=Math.exp(-0.4*dtC);
+  const cy=Math.cos(h.yaw),sy=Math.sin(h.yaw),cp=Math.cos(h.pitch),sp=Math.sin(h.pitch),cr=Math.cos(h.roll),sr=Math.sin(h.roll);
+  const ux=sy*sp*cr+cy*sr, uy=cp*cr, uz=cy*sp*cr-sy*sr;
+  const agl=Math.max(0,h.y-SKID_H);
+  const ge=GE_BONUS*Math.exp(-agl/GE_HEIGHT)*(h.onGround?0.4:1);
+  const thrust=MAX_THRUST*c.collective*(0.75+0.25*h.rotorRpm)*(1+ge);
+  let fx=ux*thrust, fy=uy*thrust-MASS*GRAVITY, fz=uz*thrust;
+  const speed=Math.hypot(h.vx,h.vy,h.vz);
+  fx-=h.vx*DRAG_H*MASS*(0.4+speed*0.02);
+  fz-=h.vz*DRAG_H*MASS*(0.4+speed*0.02);
+  fy-=h.vy*DRAG_V*MASS*0.15;
+  if(h.vy<0&&c.collective>0.3) fy-=SETTLE*MASS*(-h.vy)*c.collective;
+  h.vx+=(fx/MASS)*dtC; h.vy+=(fy/MASS)*dtC; h.vz+=(fz/MASS)*dtC;
+  h.x+=h.vx*dtC; h.y+=h.vy*dtC; h.z+=h.vz*dtC;
+  if(h.y<=SKID_H){
+    const pen=SKID_H-h.y;
+    const spring=LAND_SPRING*pen;
+    const damp=LAND_DAMP*Math.min(0,h.vy);
+    h.vy+=((spring-damp)/MASS)*dtC;
+    h.y=SKID_H;
+    const grip=clamp(1-Math.abs(h.vy)*0.5,0.2,1);
+    h.vx*=Math.exp(-FRICTION*grip*dtC);
+    h.vz*=Math.exp(-FRICTION*grip*dtC);
+    if(c.collective<0.55){
+      h.vy*=Math.exp(-6*dtC);
+      if(Math.abs(h.vy)<1.5){h.vy=0;h.onGround=true;h.pitch*=Math.exp(-4*dtC);h.roll*=Math.exp(-4*dtC);}
+      else h.onGround=false;
+    } else if(Math.abs(h.vy)<0.35){h.vy=0;h.onGround=true;}
+    else h.onGround=Math.abs(h.vy)<1.2;
+  } else h.onGround=false;
+}
+function hardLanding(h){return h.y<=SKID_H+0.05&&(h.vy<-7||Math.hypot(h.vx,h.vz)>16)}
+
+function updateCamera(cam,heli,mode,dt){
+  const speed=Math.hypot(heli.vx,heli.vz);
+  let tx=heli.x,ty=heli.y+2.2,tz=heli.z,wantYaw=cam.yaw,wantPitch=cam.pitch,wantDist=cam.dist;
+  if(mode==='chase'){
+    const lead=clamp(speed*0.35,0,12);
+    const back=16+clamp(speed*0.35,0,12);
+    const height=5.5+clamp(speed*0.08,0,4);
+    const lookX=heli.x+Math.sin(heli.yaw)*lead;
+    const lookY=heli.y+1.4;
+    const lookZ=heli.z+Math.cos(heli.yaw)*lead;
+    tx=heli.x-Math.sin(heli.yaw)*back;
+    tz=heli.z-Math.cos(heli.yaw)*back;
+    ty=heli.y+height;
+    const dx=lookX-tx,dy=lookY-ty,dz=lookZ-tz;
+    const horiz=Math.hypot(dx,dz)||1;
+    wantYaw=Math.atan2(dx,dz); wantPitch=Math.atan2(dy,horiz); wantDist=back;
+  } else if(mode==='pad'){
+    tx=-32; ty=18; tz=-32;
+    const dx=heli.x-tx,dy=heli.y+1.5-ty,dz=heli.z-tz;
+    const horiz=Math.hypot(dx,dz)||1;
+    wantYaw=Math.atan2(dx,dz); wantPitch=Math.atan2(dy,horiz); wantDist=45;
+  } else {
+    const orbitAng=wrapAngle((cam.orbitAng??heli.yaw+0.9)+0.28*dt);
+    cam.orbitAng=orbitAng;
+    wantDist=24+clamp(speed*0.25,0,10);
+    tx=heli.x-Math.sin(orbitAng)*wantDist;
+    tz=heli.z-Math.cos(orbitAng)*wantDist;
+    ty=heli.y+9;
+    const dx=heli.x-tx,dy=heli.y+1.2-ty,dz=heli.z-tz;
+    const horiz=Math.hypot(dx,dz)||1;
+    wantYaw=Math.atan2(dx,dz); wantPitch=Math.atan2(dy,horiz);
+  }
+  if(mode==='chase'||mode==='orbit'){
+    const leadT=clamp(speed*0.08,0.04,0.45);
+    tx+=heli.vx*leadT; tz+=heli.vz*leadT; ty+=heli.vy*leadT*0.35;
+  }
+  const err=Math.hypot(tx-cam.x,ty-cam.y,tz-cam.z);
+  const frameW=Math.max(wantDist,12);
+  const errFrames=err/frameW;
+  let k=mode==='pad'?6:mode==='chase'?10:7;
+  k*=1+clamp(errFrames*0.9,0,4);
+  if(errFrames>2.4)k=Math.max(k,48); else if(errFrames>1.35)k=Math.max(k,24);
+  const a=1-Math.exp(-k*dt);
+  cam.x=lerp(cam.x,tx,a); cam.y=lerp(cam.y,ty,a); cam.z=lerp(cam.z,tz,a);
+  const ka=1-Math.exp(-(mode==='orbit'?5:9)*dt);
+  cam.yaw+=wrapAngle(wantYaw-cam.yaw)*ka;
+  cam.pitch=lerp(cam.pitch,wantPitch,ka);
+  cam.dist=lerp(cam.dist,wantDist,ka);
+}
+
+function project(p,cam,w,h){
+  const cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw),cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch);
+  const dx=p.x-cam.x,dy=p.y-cam.y,dz=p.z-cam.z;
+  const rx=dx*cy-dz*sy, rz=dx*sy+dz*cy;
+  const fy=dy*cp-rz*sp, fz=dy*sp+rz*cp;
+  if(fz<0.6) return null;
+  const fov=1.15;
+  return {x:w/2+(rx/fz)*(h*0.5*fov), y:h/2-(fy/fz)*(h*0.5*fov), d:fz};
+}
+function hash(n){const s=Math.sin(n*127.1)*43758.5453;return s-Math.floor(s)}
+function hex(h){const s=h.replace('#','');return [parseInt(s.slice(0,2),16),parseInt(s.slice(2,4),16),parseInt(s.slice(4,6),16)]}
+function mix(a,b,t){const pa=hex(a),pb=hex(b);return `rgb(${(pa[0]+(pb[0]-pa[0])*t)|0},${(pa[1]+(pb[1]-pa[1])*t)|0},${(pa[2]+(pb[2]-pa[2])*t)|0})`}
+
+class Renderer{
+  constructor(){this.rotorPhase=0;this.dust=[]}
+  draw(ctx,sim,w,h,dt){
+    const q=QUALITY[sim.quality];
+    this.rotorPhase+=dt*(8+sim.heli.rotorRpm*40);
+    this.sky(ctx,w,h,sim.heli.y);
+    this.ground(ctx,sim,w,h,q.groundDetail);
+    this.pad(ctx,sim.cam,w,h);
+    this.buildings(ctx,sim,w,h,q.buildings);
+    this.trees(ctx,sim,w,h,q.trees);
+    if(q.particles>0) this.particles(ctx,sim,w,h,dt,q.particles);
+    this.heli(ctx,sim.heli,sim.cam,w,h,q.shadows);
+    const g=ctx.createRadialGradient(w/2,h/2,h*0.35,w/2,h/2,h*0.75);
+    g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.35)');
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+  }
+  sky(ctx,w,h,alt){
+    const t=clamp(alt/120,0,1);
+    const g=ctx.createLinearGradient(0,0,0,h);
+    g.addColorStop(0,mix('#6ec8ff','#1a3a6a',t*0.5));
+    g.addColorStop(0.45,mix('#a8d8f0','#4a6a8a',t*0.3));
+    g.addColorStop(1,mix('#c8b898','#6a6858',t*0.2));
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+  }
+  ground(ctx,sim,w,h,detail){
+    const cam=sim.cam;
+    const horizon=project({x:cam.x+Math.sin(cam.yaw)*800,y:0,z:cam.z+Math.cos(cam.yaw)*800},cam,w,h);
+    const hy=horizon?clamp(horizon.y,h*0.25,h*0.75):h*0.55;
+    const g=ctx.createLinearGradient(0,hy,0,h);
+    g.addColorStop(0,'#5a7a48'); g.addColorStop(1,'#3a5230');
+    ctx.fillStyle=g; ctx.fillRect(0,hy,w,h-hy);
+    ctx.save(); ctx.beginPath(); ctx.rect(0,hy,w,h-hy); ctx.clip();
+    const step=Math.max(8,40-detail);
+    for(let i=-detail;i<=detail;i++){
+      const z0=cam.z+Math.cos(cam.yaw)*(20+i*step);
+      const x0=cam.x+Math.sin(cam.yaw)*(20+i*step);
+      const a=project({x:x0-80,y:0,z:z0-80},cam,w,h);
+      const b=project({x:x0+80,y:0,z:z0+80},cam,w,h);
+      if(!a||!b) continue;
+      ctx.strokeStyle=`rgba(40,60,30,${0.15+0.1*(1-Math.abs(i)/detail)})`;
+      ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  pad(ctx,cam,w,h){
+    const ring=[];
+    for(let i=0;i<=32;i++){
+      const a=(i/32)*Math.PI*2;
+      const p=project({x:PAD_X+Math.cos(a)*PAD_R,y:0.05,z:PAD_Z+Math.sin(a)*PAD_R},cam,w,h);
+      if(p) ring.push(p);
+    }
+    if(ring.length>4){
+      ctx.beginPath(); ctx.moveTo(ring[0].x,ring[0].y);
+      for(const p of ring) ctx.lineTo(p.x,p.y);
+      ctx.closePath(); ctx.fillStyle='rgba(50,55,60,0.85)'; ctx.fill();
+      ctx.strokeStyle='#e8c84a'; ctx.lineWidth=2; ctx.stroke();
+    }
+    const c=project({x:PAD_X,y:0.08,z:PAD_Z},cam,w,h);
+    if(c){
+      const s=clamp(180/c.d,4,28);
+      ctx.strokeStyle='#e8c84a'; ctx.lineWidth=Math.max(2,s*0.15);
+      ctx.strokeRect(c.x-s,c.y-s*0.7,s*2,s*1.4);
+      ctx.beginPath();
+      ctx.moveTo(c.x-s*0.55,c.y-s*0.5); ctx.lineTo(c.x-s*0.55,c.y+s*0.5);
+      ctx.moveTo(c.x+s*0.55,c.y-s*0.5); ctx.lineTo(c.x+s*0.55,c.y+s*0.5);
+      ctx.moveTo(c.x-s*0.55,c.y); ctx.lineTo(c.x+s*0.55,c.y);
+      ctx.stroke();
+    }
+  }
+  buildings(ctx,sim,w,h,n){
+    for(let i=0;i<n;i++){
+      const ang=hash(i+1.1)*Math.PI*2, dist=60+hash(i+2.2)*140;
+      const bx=Math.cos(ang)*dist, bz=Math.sin(ang)*dist;
+      if(Math.hypot(bx,bz)<35) continue;
+      const bw=4+hash(i+3)*8, bh=6+hash(i+4)*18;
+      const corners=[
+        {x:bx-bw,y:0,z:bz-bw},{x:bx+bw,y:0,z:bz-bw},{x:bx+bw,y:0,z:bz+bw},{x:bx-bw,y:0,z:bz+bw},
+        {x:bx-bw,y:bh,z:bz-bw},{x:bx+bw,y:bh,z:bz-bw},{x:bx+bw,y:bh,z:bz+bw},{x:bx-bw,y:bh,z:bz+bw}
+      ];
+      const proj=corners.map(p=>project(p,sim.cam,w,h));
+      if(proj.some(p=>!p)) continue;
+      const face=[4,5,6,7].map(i=>proj[i]);
+      ctx.beginPath(); ctx.moveTo(face[0].x,face[0].y);
+      for(const p of face) ctx.lineTo(p.x,p.y);
+      ctx.closePath();
+      ctx.fillStyle=`rgb(${70+hash(i)*40|0},${80+hash(i+5)*30|0},${90+hash(i+6)*40|0})`;
+      ctx.fill();
+      for(const idx of [[0,1,5,4],[1,2,6,5]]){
+        const pts=idx.map(j=>proj[j]);
+        ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
+        for(const p of pts) ctx.lineTo(p.x,p.y);
+        ctx.closePath();
+        ctx.fillStyle=`rgba(40,50,60,${0.55+hash(i+idx[0])*0.2})`;
+        ctx.fill();
+      }
+    }
+  }
+  trees(ctx,sim,w,h,n){
+    for(let i=0;i<n;i++){
+      const ang=hash(i+20.1)*Math.PI*2, dist=25+hash(i+21)*120;
+      const tx=Math.cos(ang)*dist, tz=Math.sin(ang)*dist;
+      if(Math.hypot(tx-PAD_X,tz-PAD_Z)<PAD_R+6) continue;
+      const base=project({x:tx,y:0,z:tz},sim.cam,w,h);
+      const top=project({x:tx,y:5+hash(i)*4,z:tz},sim.cam,w,h);
+      if(!base||!top) continue;
+      const s=clamp(40/base.d,2,14);
+      ctx.strokeStyle='#4a3020'; ctx.lineWidth=Math.max(1,s*0.25);
+      ctx.beginPath(); ctx.moveTo(base.x,base.y); ctx.lineTo(top.x,top.y); ctx.stroke();
+      ctx.fillStyle=`rgba(${30+hash(i)*40|0},${90+hash(i+1)*50|0},40,0.85)`;
+      ctx.beginPath(); ctx.arc(top.x,top.y,s,0,Math.PI*2); ctx.fill();
+    }
+  }
+  particles(ctx,sim,w,h,dt,max){
+    const heli=sim.heli;
+    if(heli.y<10&&heli.rotorRpm>0.4&&!heli.onGround){
+      if(this.dust.length<max&&Math.random()<0.5){
+        const a=Math.random()*Math.PI*2;
+        this.dust.push({x:heli.x+Math.cos(a)*3,z:heli.z+Math.sin(a)*3,life:0.6+Math.random()*0.5,vx:Math.cos(a)*(2+Math.random()*4),vz:Math.sin(a)*(2+Math.random()*4)});
+      }
+    }
+    for(let i=this.dust.length-1;i>=0;i--){
+      const d=this.dust[i]; d.life-=dt; d.x+=d.vx*dt; d.z+=d.vz*dt;
+      if(d.life<=0){this.dust.splice(i,1);continue;}
+      const p=project({x:d.x,y:0.2,z:d.z},sim.cam,w,h);
+      if(!p) continue;
+      ctx.fillStyle=`rgba(180,170,140,${d.life*0.35})`;
+      ctx.beginPath(); ctx.arc(p.x,p.y,clamp(30/p.d,2,10),0,Math.PI*2); ctx.fill();
+    }
+  }
+  heli(ctx,heli,cam,w,h,shadows){
+    const cy=Math.cos(heli.yaw),sy=Math.sin(heli.yaw),cp=Math.cos(heli.pitch),sp=Math.sin(heli.pitch),cr=Math.cos(heli.roll),sr=Math.sin(heli.roll);
+    const xf=(lx,ly,lz)=>{
+      let x=lx*cr-ly*sr,y=lx*sr+ly*cr,z=lz;
+      const y2=y*cp-z*sp,z2=y*sp+z*cp; y=y2; z=z2;
+      return {x:heli.x+x*cy+z*sy, y:heli.y+y, z:heli.z+-x*sy+z*cy};
+    };
+    if(shadows&&heli.y<40){
+      const sh=project({x:heli.x,y:0.05,z:heli.z},cam,w,h);
+      if(sh){
+        const s=clamp(90/sh.d,4,30)*(1-clamp(heli.y/40,0,0.85));
+        ctx.fillStyle='rgba(0,0,0,0.28)';
+        ctx.beginPath(); ctx.ellipse(sh.x,sh.y,s*1.2,s*0.45,0,0,Math.PI*2); ctx.fill();
+      }
+    }
+    const parts=[
+      {a:xf(-1.2,-1.2,-2),b:xf(-1.2,-1.2,2),color:'#333',width:2},
+      {a:xf(1.2,-1.2,-2),b:xf(1.2,-1.2,2),color:'#333',width:2},
+      {a:xf(-1.2,-1.2,-1),b:xf(-0.6,-0.2,-0.5),color:'#444',width:1.5},
+      {a:xf(1.2,-1.2,-1),b:xf(0.6,-0.2,-0.5),color:'#444',width:1.5},
+      {a:xf(0,0,-3.2),b:xf(0,0.2,2.5),color:'#c0c8d0',width:5},
+      {a:xf(-0.9,0.2,0.2),b:xf(0.9,0.2,0.2),color:'#2a6aaa',width:4},
+      {a:xf(-0.9,0.2,1.6),b:xf(0.9,0.2,1.6),color:'#2a6aaa',width:4},
+      {a:xf(0,0.3,-1),b:xf(0,0.8,-5.5),color:'#b0b8c0',width:2.5},
+      {a:xf(0,0.8,-5.5),b:xf(0.8,0.8,-5.5),color:'#888',width:2}
+    ];
+    const drawn=parts.map(p=>{
+      const pa=project(p.a,cam,w,h),pb=project(p.b,cam,w,h);
+      return pa&&pb?{pa,pb,color:p.color,width:p.width,d:(pa.d+pb.d)/2}:null;
+    }).filter(Boolean);
+    drawn.sort((a,b)=>b.d-a.d);
+    for(const p of drawn){
+      ctx.strokeStyle=p.color; ctx.lineWidth=Math.max(1,p.width*clamp(40/p.d,0.4,2)); ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(p.pa.x,p.pa.y); ctx.lineTo(p.pb.x,p.pb.y); ctx.stroke();
+    }
+    const hub=xf(0,1.2,0.2);
+    for(let i=0;i<2;i++){
+      const a=this.rotorPhase+(i*Math.PI)/2;
+      const tip1=xf(Math.cos(a)*5.5,1.2,0.2+Math.sin(a)*5.5);
+      const tip2=xf(Math.cos(a+Math.PI)*5.5,1.2,0.2+Math.sin(a+Math.PI)*5.5);
+      const p0=project(hub,cam,w,h),p1=project(tip1,cam,w,h),p2=project(tip2,cam,w,h);
+      if(p0&&p1&&p2){
+        ctx.strokeStyle=`rgba(30,30,35,${0.35+heli.rotorRpm*0.35})`;
+        ctx.lineWidth=Math.max(1,2.5*clamp(40/p0.d,0.4,2));
+        ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
+      }
+    }
+    const disc=[];
+    for(let i=0;i<=20;i++){
+      const a=(i/20)*Math.PI*2;
+      const p=project(xf(Math.cos(a)*5.2,1.15,0.2+Math.sin(a)*5.2),cam,w,h);
+      if(p) disc.push(p);
+    }
+    if(disc.length>8){
+      ctx.beginPath(); ctx.moveTo(disc[0].x,disc[0].y);
+      for(const p of disc) ctx.lineTo(p.x,p.y);
+      ctx.closePath(); ctx.fillStyle=`rgba(200,210,220,${0.06+heli.rotorRpm*0.08})`; ctx.fill();
+    }
+    const tr=this.rotorPhase*2.3;
+    const t1=xf(0.8,0.8+Math.cos(tr)*0.9,-5.5+Math.sin(tr)*0.3);
+    const t2=xf(0.8,0.8-Math.cos(tr)*0.9,-5.5-Math.sin(tr)*0.3);
+    const pt1=project(t1,cam,w,h),pt2=project(t2,cam,w,h);
+    if(pt1&&pt2){ctx.strokeStyle='rgba(40,40,45,0.7)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(pt1.x,pt1.y);ctx.lineTo(pt2.x,pt2.y);ctx.stroke();}
+  }
+}
+
+const input={keys:new Set(),stickX:0,stickY:0,yawStick:0,collStick:0,touchCollective:null,tiltOn:false,tiltGamma:0,tiltBeta:0,tiltZeroG:0,tiltZeroB:0,tiltReady:false,tiltLive:false,tiltSrc:'',tiltDeg:18,collRate:0.70,tiltInvert:true,padX:0,padY:0,accelWatch:null};
+const sim={phase:'hangar',heli:createHeli(),cam:createCam(),camMode:'chase',controls:emptyControls(),quality:'med',time:0,crashed:false,message:''};
+const renderer=new Renderer();
+let raf=0,running=false;
+
+function tiltCyclic(){
+  if(!input.tiltOn) return {p:input.padY,r:input.padX};
+  const s=input.tiltInvert?-1:1;
+  let p=input.padY, r=input.padX;
+  if(input.tiltReady){
+    const span=Math.max(6,input.tiltDeg);
+    const angle=((screen.orientation?.angle ?? window.orientation ?? 0)*Math.PI)/180;
+    const beta=wrapAngle((input.tiltBeta-input.tiltZeroB)*Math.PI/180)*180/Math.PI;
+    const gamma=wrapAngle((input.tiltGamma-input.tiltZeroG)*Math.PI/180)*180/Math.PI;
+    const pitchRaw=clamp((beta*Math.cos(angle)-gamma*Math.sin(angle))/span,-1,1);
+    const rollRaw=clamp((gamma*Math.cos(angle)+beta*Math.sin(angle))/span,-1,1);
+    const dead=0.08;
+    p += Math.abs(pitchRaw)<dead?0:pitchRaw*s;
+    r += Math.abs(rollRaw)<dead?0:rollRaw*s;
+  }
+  return {p:clamp(p,-1,1), r:clamp(r,-1,1)};
+}
+function sampleControls(dt){
+  const k=input.keys;
+  const t=tiltCyclic();
+  let cyclicPitch=input.stickY+t.p, cyclicRoll=input.stickX+t.r, yaw=input.yawStick, collective=sim.controls.collective;
+  if(k.has('KeyW')||k.has('ArrowUp')) cyclicPitch+=1;
+  if(k.has('KeyS')||k.has('ArrowDown')) cyclicPitch-=1;
+  if(k.has('ArrowRight')||k.has('KeyL')) cyclicRoll+=1;
+  if(k.has('ArrowLeft')||k.has('KeyJ')) cyclicRoll-=1;
+  if(k.has('KeyA')||k.has('KeyQ')) yaw-=1;
+  if(k.has('KeyD')||k.has('KeyE')) yaw+=1;
+  if(k.has('KeyR')||k.has('Space')) collective+=0.55*dt;
+  if(k.has('KeyF')||k.has('ControlLeft')||k.has('ControlRight')) collective-=0.55*dt;
+  if(Math.abs(input.collStick)>0.04) collective+=input.collStick*input.collRate*dt;
+  return {cyclicPitch:clamp(cyclicPitch,-1,1),cyclicRoll:clamp(cyclicRoll,-1,1),yaw:clamp(yaw,-1,1),collective:clamp(collective,0,1)};
+}
+
+function startFlight(){
+  sim.phase='flight'; sim.heli=createHeli(); sim.cam=createCam(); sim.camMode='chase';
+  sim.controls={...emptyControls(),collective:0.42}; sim.crashed=false;
+  sim.message='Spool up — raise collective (R / right slider) to lift'; sim.time=0;
+  document.getElementById('hangar').classList.add('hidden');
+  document.getElementById('flight').classList.remove('hidden');
+  if(!running){running=true; last=performance.now(); raf=requestAnimationFrame(loop);}
+}
+function toHangar(){
+  sim.phase='hangar'; sim.crashed=false; sim.message='';
+  running=false; cancelAnimationFrame(raf);
+  document.getElementById('flight').classList.add('hidden');
+  document.getElementById('hangar').classList.remove('hidden');
+}
+
+function stepSim(dt){
+  if(sim.phase!=='flight'||sim.crashed) return;
+  const prevY=sim.heli.y, prevVy=sim.heli.vy;
+  stepHeli(sim.heli,sim.controls,dt);
+  if(hardLanding(sim.heli)||(sim.heli.y<=1.45&&prevVy<-7)){
+    sim.crashed=true; sim.message='Hard landing — tap Reset';
+    sim.heli.vx=0; sim.heli.vz=0; sim.heli.vy=0;
+  } else if(sim.heli.onGround&&sim.controls.collective<HOVER_COLLECTIVE-0.12){
+    if(sim.time>2&&Math.hypot(sim.heli.vx,sim.heli.vz)<0.4) sim.message='Planted on pad — raise collective to take off';
+  } else if(!sim.heli.onGround&&Math.abs(sim.heli.vy)<0.6&&Math.abs(sim.controls.collective-HOVER_COLLECTIVE)<0.08){
+    sim.message='Hover band — fine-tune collective';
+  } else if(sim.heli.y>prevY&&sim.heli.y>3) sim.message='';
+  updateCamera(sim.cam,sim.heli,sim.camMode,dt);
+}
+
+let last=0, hudAcc=0;
+function loop(now){
+  if(!running) return;
+  const dt=Math.min(0.05,(now-last)/1000); last=now;
+  if(input.keys.has('KeyC')){input.keys.delete('KeyC'); cycleCam();}
+  sim.controls=sampleControls(dt);
+  sim.time+=dt;
+  stepSim(dt);
+  const canvas=document.getElementById('cv');
+  const dpr=Math.min(window.devicePixelRatio||1, sim.quality==='low'?1:2);
+  const w=canvas.clientWidth, h=canvas.clientHeight;
+  if(canvas.width!==Math.floor(w*dpr)||canvas.height!==Math.floor(h*dpr)){
+    canvas.width=Math.floor(w*dpr); canvas.height=Math.floor(h*dpr);
+  }
+  const ctx=canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  renderer.draw(ctx,sim,w,h,dt);
+  hudAcc+=dt;
+  if(hudAcc>0.1){hudAcc=0; updateHud();}
+  raf=requestAnimationFrame(loop);
+}
+
+function updateHud(){
+  const h=sim.heli;
+  const alt=Math.max(0,h.y-1.4);
+  const speed=Math.hypot(h.vx,h.vz)*1.94384;
+  const collPct=(sim.controls.collective*100);
+  const tiltBit=input.tiltOn?(input.tiltLive?'live':'no sensor'):'off';
+  document.getElementById('hudPanel').innerHTML=
+    `<div><strong>ALT</strong> ${alt.toFixed(1)} m</div>
+     <div><strong>SPEED</strong> ${speed.toFixed(0)} kt</div>
+     <div><strong>HDG</strong> ${headingDeg(h.yaw).toFixed(0).padStart(3,'0')}°</div>
+     <div><strong>COLL</strong> ${collPct.toFixed(0)}%</div>
+     <div class="collbar-wrap"><div class="collbar" style="width:${collPct}%"></div></div>
+     <div style="opacity:.7;font-size:.72rem">TILT ${tiltBit}${input.tiltSrc?' · '+input.tiltSrc:''}</div>`;
+  document.getElementById('camBtn').textContent='Cam · '+sim.camMode;
+  document.getElementById('qBtn').textContent='Q · '+sim.quality;
+  const m=document.getElementById('msg');
+  if(sim.message||sim.crashed){m.classList.remove('hidden'); m.classList.toggle('warn',sim.crashed); m.textContent=sim.crashed?'Hard landing — Reset':sim.message;}
+  else m.classList.add('hidden');
+}
+function cycleCam(){sim.camMode=CAM_ORDER[(CAM_ORDER.indexOf(sim.camMode)+1)%3]}
+function cycleQ(){sim.quality=sim.quality==='low'?'med':sim.quality==='med'?'high':'low'; document.getElementById('qBtn').textContent='Q · '+sim.quality;}
+function setTiltLabel(){
+  const s=input.tiltOn?(input.tiltLive?'Tilt: live':'Tilt: waiting'):'Tilt: off';
+  const a=document.getElementById('tiltBtn');
+  const b=document.getElementById('hangarTilt');
+  if(a) a.textContent=s;
+  if(b) b.textContent=s;
+  document.getElementById('flight').classList.toggle('tilt-on', input.tiltOn);
+  const hint=document.getElementById('tiltHint');
+  if(hint){
+    if(location.protocol==='file:' && input.tiltOn && !input.tiltLive)
+      hint.textContent='Tilt needs https or Chrome “open as site”. Sensors blocked on raw file://.';
+    else if(input.tiltOn && !input.tiltLive)
+      hint.textContent='Waiting on gyro/accel — keep the page in front, don’t lock orientation.';
+    else hint.textContent='Tilt option for cyclic · yaw on screen · throttle springs back';
+  }
+}
+function applyTiltSample(beta,gamma,src){
+  if(!input.tiltOn || !Number.isFinite(beta) || !Number.isFinite(gamma)) return;
+  // Each source uses a different angle convention: zero again on handover.
+  const family=s=>(s==='abs'?'orient':s);
+  if(family(src)!==family(input.tiltSrc)) input.tiltReady=false;
+  input.tiltBeta=beta; input.tiltGamma=gamma; input.tiltLive=true; input.tiltSrc=src;
+  if(!input.tiltReady){ input.tiltZeroB=beta; input.tiltZeroG=gamma; input.tiltReady=true; setTiltLabel(); }
+}
+function onOrient(e){
+  if(e.gamma==null||e.beta==null) return;
+  applyTiltSample(e.beta,e.gamma, e.absolute?'abs':'orient');
+}
+function onMotion(e){
+  const g=e.accelerationIncludingGravity;
+  if(!g||g.x==null||g.y==null||g.z==null) return;
+  if(input.tiltSrc==='orient'||input.tiltSrc==='abs') return;
+  const roll=Math.atan2(g.x, Math.hypot(g.y,g.z))*180/Math.PI;
+  const pitch=Math.atan2(-g.z, Math.hypot(g.y,g.x))*180/Math.PI;
+  applyTiltSample(pitch,roll,'accel');
+}
+function calibrateTilt(){
+  input.tiltZeroB=input.tiltBeta; input.tiltZeroG=input.tiltGamma; input.tiltReady=input.tiltLive;
+  sim.message=input.tiltLive?'Tilt zeroed at current hold':'No tilt data yet — turn Tilt on first';
+  setTiltLabel();
+}
+function unbindTilt(){
+  window.removeEventListener('deviceorientation', onOrient, true);
+  window.removeEventListener('deviceorientationabsolute', onOrient, true);
+  window.removeEventListener('devicemotion', onMotion, true);
+  try{ input.accelWatch&&input.accelWatch.stop(); }catch(e){}
+  input.accelWatch=null;
+}
+function startAccelApi(){
+  try{
+    if(typeof Accelerometer==='undefined') return;
+    const acc=new Accelerometer({frequency:30});
+    acc.addEventListener('reading',()=>{
+      if(input.tiltSrc==='orient'||input.tiltSrc==='abs') return;
+      const roll=Math.atan2(acc.x, Math.hypot(acc.y,acc.z))*180/Math.PI;
+      const pitch=Math.atan2(-acc.z, Math.hypot(acc.y,acc.x))*180/Math.PI;
+      applyTiltSample(pitch,roll,'sensor');
+    });
+    acc.start();
+    input.accelWatch=acc;
+  }catch(e){}
+}
+async function enableTilt(){
+  try{
+    if(typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function'){
+      try{ await DeviceOrientationEvent.requestPermission(); }catch(e){}
+    }
+    if(typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'){
+      try{ await DeviceMotionEvent.requestPermission(); }catch(e){}
+    }
+  }catch(err){}
+  if(!input.tiltOn) return false;
+  unbindTilt();
+  window.addEventListener('deviceorientation', onOrient, true);
+  window.addEventListener('deviceorientationabsolute', onOrient, true);
+  window.addEventListener('devicemotion', onMotion, true);
+  input.tiltReady=false; input.tiltLive=false; input.tiltSrc='';
+  startAccelApi();
+  setTimeout(()=>{ if(input.tiltOn && !input.tiltLive) setTiltLabel(); }, 1200);
+  return true;
+}
+async function toggleTilt(){
+  if(input.tiltOn){
+    input.tiltOn=false; input.tiltReady=false; input.tiltLive=false; input.tiltSrc='';
+    input.padX=0; input.padY=0;
+    unbindTilt(); setTiltLabel();
+    return;
+  }
+  input.tiltOn=true;
+  await enableTilt();
+  sim.message=input.tiltLive
+    ? 'Gyro live — Calibrate, then bank. Invert if backwards.'
+    : 'No gyro on this page — drag the VIEW or left stick to lean.';
+  setTiltLabel();
+}
+
+document.getElementById('flyBtn').onclick=startFlight;
+document.getElementById('camBtn').onclick=cycleCam;
+document.getElementById('qBtn').onclick=cycleQ;
+document.getElementById('tiltBtn').onclick=toggleTilt;
+document.getElementById('hangarTilt').onclick=toggleTilt;
+document.getElementById('calBtn').onclick=calibrateTilt;
+document.getElementById('hangarCal').onclick=calibrateTilt;
+function setInvLabel(){
+  const s=input.tiltInvert?'Invert: on':'Invert: off';
+  const a=document.getElementById('invBtn');
+  const b=document.getElementById('hangarInv');
+  if(a) a.textContent=s;
+  if(b) b.textContent=s;
+}
+function toggleInvert(){ input.tiltInvert=!input.tiltInvert; setInvLabel(); }
+document.getElementById('invBtn').onclick=toggleInvert;
+document.getElementById('hangarInv').onclick=toggleInvert;
+setInvLabel();
+const tiltSensEl=document.getElementById('tiltSens');
+const collSensEl=document.getElementById('collSens');
+function syncSens(){
+  input.tiltDeg=Number(tiltSensEl.value);
+  input.collRate=Number(collSensEl.value)/10;
+  document.getElementById('tiltSensLbl').textContent=input.tiltDeg+'°';
+  document.getElementById('collSensLbl').textContent=input.collRate.toFixed(1)+'×';
+}
+tiltSensEl.oninput=syncSens; collSensEl.oninput=syncSens; syncSens();
+document.getElementById('resetBtn').onclick=()=>{startFlight();};
+document.getElementById('hangarBtn').onclick=toHangar;
+document.querySelectorAll('.quality-row button').forEach(b=>{
+  b.onclick=()=>{
+    sim.quality=b.dataset.q;
+    document.querySelectorAll('.quality-row button').forEach(x=>x.classList.toggle('active',x===b));
+  };
+});
+window.addEventListener('keydown',e=>{
+  input.keys.add(e.code);
+  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup',e=>input.keys.delete(e.code));
+window.addEventListener('blur',()=>input.keys.clear());
+
+function bindStick(el,kind){
+  let id=null;
+  const knob=el.querySelector('.stick-knob');
+  const move=(cx,cy)=>{
+    const r=el.getBoundingClientRect();
+    const ox=r.left+r.width/2, oy=r.top+r.height/2, max=r.width*0.42;
+    let dx=cx-ox, dy=cy-oy;
+    // Yaw is horizontal only; vertical thumb drift must not reduce authority.
+    if(kind==='yaw'){ dx=clamp(dx,-max,max); dy=0; }
+    const mag=Math.hypot(dx,dy)||1;
+    if(mag>max){dx=(dx/mag)*max; dy=(dy/mag)*max;}
+    const nx=dx/max, ny=dy/max;
+    if(kind==='cyclic'){input.stickX=nx; input.stickY=ny;}
+    else input.yawStick=nx;
+    knob.style.transform=`translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+  };
+  el.addEventListener('pointerdown',e=>{if(id!==null)return; e.preventDefault(); el.setPointerCapture(e.pointerId); id=e.pointerId; move(e.clientX,e.clientY);});
+  el.addEventListener('pointermove',e=>{if(id!==e.pointerId)return; move(e.clientX,e.clientY);});
+  const end=e=>{if(id!==e.pointerId)return; id=null; if(kind==='cyclic'){input.stickX=0;input.stickY=0;} else input.yawStick=0; knob.style.transform='translate(-50%,-50%)';};
+  el.addEventListener('pointerup',end); el.addEventListener('pointercancel',end);
+  el.addEventListener('lostpointercapture',end);
+}
+bindStick(document.getElementById('cyclic'),'cyclic');
+bindStick(document.getElementById('yaw'),'yaw');
+(()=>{
+  const cv=document.getElementById('cv');
+  let id=null, ox=0, oy=0;
+  cv.addEventListener('pointerdown',e=>{
+    if(e.target!==cv) return;
+    if(!input.tiltOn) return;
+    e.preventDefault();
+    cv.setPointerCapture(e.pointerId);
+    id=e.pointerId; ox=e.clientX; oy=e.clientY;
+  });
+  cv.addEventListener('pointermove',e=>{
+    if(id!==e.pointerId) return;
+    const span=90;
+    input.padX=clamp((e.clientX-ox)/span,-1,1);
+    input.padY=clamp((e.clientY-oy)/span,-1,1);
+  });
+  const end=e=>{
+    if(id!==e.pointerId) return;
+    id=null; input.padX=0; input.padY=0;
+  };
+  cv.addEventListener('pointerup',end);
+  cv.addEventListener('pointercancel',end);
+})();
+(()=>{
+  const el=document.getElementById('coll'); const knob=el.querySelector('.collective-knob'); let id=null;
+  const move=cy=>{
+    const r=el.getBoundingClientRect();
+    const ny=clamp((cy-(r.top+r.height/2))/(r.height*0.42),-1,1);
+    input.collStick=-ny;
+    knob.style.top=`${50+ny*42}%`;
+  };
+  const snap=()=>{ input.collStick=0; knob.style.top='50%'; };
+  el.addEventListener('pointerdown',e=>{e.preventDefault(); el.setPointerCapture(e.pointerId); id=e.pointerId; move(e.clientY);});
+  el.addEventListener('pointermove',e=>{if(id!==e.pointerId)return; move(e.clientY);});
+  el.addEventListener('pointerup',e=>{if(id!==e.pointerId)return; id=null; snap();});
+  el.addEventListener('pointercancel',e=>{if(id!==e.pointerId)return; id=null; snap();});
+})();
+</script>
+</body>
+</html>
