@@ -38,10 +38,11 @@ import { VirtualControls } from './VirtualControls'
 
 type Props = {
   quality: QualityKey
+  onQualityChange: (quality: QualityKey) => void
   onHangar: () => void
 }
 
-export function FlightView({ quality, onHangar }: Props) {
+export function FlightView({ quality, onQualityChange, onHangar }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const simRef = useRef<Sim | null>(null)
   const inputRef = useRef(createInput())
@@ -65,6 +66,7 @@ export function FlightView({ quality, onHangar }: Props) {
   const [showSettings, setShowSettings] = useState(false)
   /** Sticky no-signal line (does not toast-and-fade). */
   const [tiltSticky, setTiltSticky] = useState<string | null>(null)
+  const [controlResetKey, setControlResetKey] = useState(0)
   const [paused, setPaused] = useState(false)
   const [pauseReason, setPauseReason] = useState('')
 
@@ -379,7 +381,12 @@ export function FlightView({ quality, onHangar }: Props) {
           }}
           onReset={() => {
             const s = sim()
-            if (s) startFlight(s)
+            if (!s) return
+            const input = inputRef.current
+            resetSpringSticks(input)
+            input.touchCollective = 0.42
+            startFlight(s)
+            setControlResetKey((key) => key + 1)
           }}
           onHangar={() => {
             const s = sim()
@@ -389,6 +396,7 @@ export function FlightView({ quality, onHangar }: Props) {
           onQuality={(q) => {
             const s = sim()
             if (s) setQuality(s, q)
+            onQualityChange(q)
           }}
           onHelp={() => {
             setShowSettings(false)
@@ -417,7 +425,7 @@ export function FlightView({ quality, onHangar }: Props) {
           </div>
         </div>
       )}
-      <VirtualControls input={inputRef.current} initialCollective={0.42} />
+      <VirtualControls key={controlResetKey} input={inputRef.current} initialCollective={0.42} />
     </div>
   )
 }
