@@ -21,7 +21,11 @@ export default function App() {
 
   return (
     <div className="app">
-      <FlightView quality={quality} onHangar={() => setPhase('hangar')} />
+      <FlightView
+        quality={quality}
+        onQualityChange={setQuality}
+        onHangar={() => setPhase('hangar')}
+      />
     </div>
   )
 }
