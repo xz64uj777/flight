@@ -24,6 +24,7 @@ type Props = {
   onPitchMode: () => void
   onTilt: () => void
   onRecalibrate: () => void
+  onPause: () => void
 }
 
 function tiltLabel(hb: TiltHeartbeat, on: boolean): string {
@@ -52,6 +53,7 @@ export function HUD({
   onPitchMode,
   onTilt,
   onRecalibrate,
+  onPause,
 }: Props) {
   const banner = crashed ? 'Hard landing — Reset' : calStatus || tiltSticky || message
   return (
@@ -84,6 +86,7 @@ export function HUD({
             Settings
           </button>
           <button type="button" onClick={onHelp}>Help</button>
+          <button type="button" onClick={onPause}>Pause</button>
           <button type="button" onClick={onReset}>Reset</button>
           <button type="button" onClick={onHangar}>Hangar</button>
         </div>
@@ -151,7 +154,7 @@ export function HUD({
             <li><strong>Tilt</strong> — optional phone gyro. Live needs sustained motion; no signal stays until fixed or OFF. Recalibrate only when live.</li>
             <li><strong>Sens</strong> Low/Med/High scales sticks + gyro (Settings).</li>
             <li><strong>Realistic</strong> — opt-in heli pitch (screen-up → nose down).</li>
-            <li>Keys: W/S pitch · arrows roll · A/D yaw · R/F coll · C cam · H help</li>
+            <li>Keys: W/S pitch · arrows roll · A/D yaw · R/F coll · C cam · H help · Esc pause</li>
           </ul>
           <p className="help-dismiss">Tap to close</p>
         </div>
