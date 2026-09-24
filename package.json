@@ -1,12 +1,14 @@
 {
   "name": "copter-flight",
   "private": true,
-  "version": "4.0.0",
+  "version": "4.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port 8090 --host",
     "build": "tsc -b && vite build",
-    "preview": "vite preview --port 8090 --host"
+    "preview": "vite preview --port 8090 --host",
+    "test": "node --experimental-strip-types --test tests/control-math.test.ts",
+    "check": "npm run test && npm run build"
   },
   "dependencies": {
     "react": "^18.3.1",
