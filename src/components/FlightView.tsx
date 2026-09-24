@@ -7,8 +7,10 @@ import {
   createInput,
   gyroIsLive,
   gyroIsSustained,
+  markGyroCalibrated,
   requestGyroPermission,
   resetGyroTracking,
+  resetSpringSticks,
   sampleControls,
   type GyroBind,
 } from '../game/input'
@@ -51,6 +53,7 @@ export function FlightView({ quality, onHangar }: Props) {
   const tiltOnAtRef = useRef(0)
   /** Once no-signal latches, chip + sticky hint stay until sustained live or Tilt OFF. */
   const noSignalStickyRef = useRef(false)
+  const pausedRef = useRef(false)
 
   const [hud, setHud] = useState<Hud | null>(null)
   const [message, setMessage] = useState('')
@@ -62,6 +65,8 @@ export function FlightView({ quality, onHangar }: Props) {
   const [showSettings, setShowSettings] = useState(false)
   /** Sticky no-signal line (does not toast-and-fade). */
   const [tiltSticky, setTiltSticky] = useState<string | null>(null)
+  const [paused, setPaused] = useState(false)
+  const [pauseReason, setPauseReason] = useState('')
 
   const patchPrefs = useCallback((partial: Partial<FlightPrefs>) => {
     setPrefs((p) => {
@@ -74,6 +79,55 @@ export function FlightView({ quality, onHangar }: Props) {
   useEffect(() => {
     prefsRef.current = prefs
   }, [prefs])
+
+  const pauseFlight = useCallback((reason = 'Paused') => {
+    pausedRef.current = true
+    resetSpringSticks(inputRef.current)
+    audioRef.current.stop()
+    setPauseReason(reason)
+    setPaused(true)
+  }, [])
+
+  const resumeFlight = useCallback(() => {
+    pausedRef.current = false
+    setPauseReason('')
+    setPaused(false)
+    audioRef.current.start()
+  }, [])
+
+  const invalidateTiltForInterruption = useCallback(() => {
+    if (!prefsRef.current.tiltCyclic) return
+    resetGyroTracking(inputRef.current)
+    pendingCalRef.current = true
+    fallbackTriedRef.current = false
+    noSignalStickyRef.current = false
+    tiltOnAtRef.current = performance.now()
+    patchPrefs({ gyroReady: false })
+    setTiltHb('pending')
+    setTiltSticky(null)
+    setCalStatus('Hold still…')
+  }, [patchPrefs])
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState !== 'hidden') return
+      pauseFlight('Paused while the app was in the background')
+      invalidateTiltForInterruption()
+    }
+    const onRotate = () => {
+      pauseFlight('Screen rotated — controls paused for safety')
+      invalidateTiltForInterruption()
+    }
+
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('orientationchange', onRotate)
+    window.screen?.orientation?.addEventListener?.('change', onRotate)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('orientationchange', onRotate)
+      window.screen?.orientation?.removeEventListener?.('change', onRotate)
+    }
+  }, [invalidateTiltForInterruption, pauseFlight])
 
   useEffect(() => {
     const sim = createSim(quality)
@@ -94,20 +148,27 @@ export function FlightView({ quality, onHangar }: Props) {
       const dt = Math.min(0.05, (now - last) / 1000)
       last = now
       const s = simRef.current!
-      const controls = sampleControls(input, s.controls, dt, prefsRef.current)
-      if (input.keys.has('KeyC')) {
-        input.keys.delete('KeyC')
-        cycleCamera(s)
+      if (input.keys.has('Escape')) {
+        input.keys.delete('Escape')
+        if (!pausedRef.current) pauseFlight('Paused')
       }
-      if (input.keys.has('KeyH')) {
-        input.keys.delete('KeyH')
-        const cur = prefsRef.current
-        const next = { ...cur, showHelp: !cur.showHelp }
-        prefsRef.current = next
-        setPrefs(next)
+
+      if (!pausedRef.current) {
+        const controls = sampleControls(input, s.controls, dt, prefsRef.current)
+        if (input.keys.has('KeyC')) {
+          input.keys.delete('KeyC')
+          cycleCamera(s)
+        }
+        if (input.keys.has('KeyH')) {
+          input.keys.delete('KeyH')
+          const cur = prefsRef.current
+          const next = { ...cur, showHelp: !cur.showHelp }
+          prefsRef.current = next
+          setPrefs(next)
+        }
+        stepSim(s, controls, dt)
+        audio.update(s.heli.rotorRpm, controls.collective, Math.hypot(s.heli.vx, s.heli.vz))
       }
-      stepSim(s, controls, dt)
-      audio.update(s.heli.rotorRpm, controls.collective, Math.hypot(s.heli.vx, s.heli.vz))
 
       const canvas = canvasRef.current
       if (canvas) {
@@ -161,11 +222,22 @@ export function FlightView({ quality, onHangar }: Props) {
       const sustained = gyroIsSustained(input, now)
 
       if (sustained) {
+        if (
+          prefsRef.current.gyroReady &&
+          input.gyroCalibrationGeneration !== input.gyroGeneration
+        ) {
+          pendingCalRef.current = true
+          patchPrefs({ gyroReady: false })
+          setTiltHb('pending')
+          setCalStatus('Sensor changed — hold still…')
+          return
+        }
         noSignalStickyRef.current = false
         setTiltSticky(null)
         setTiltHb('live')
         if (pendingCalRef.current) {
           pendingCalRef.current = false
+          markGyroCalibrated(input)
           patchPrefs({
             gyroReady: true,
             gyroZeroBeta: input.gyroBeta,
@@ -277,6 +349,7 @@ export function FlightView({ quality, onHangar }: Props) {
       }
       const inp = inputRef.current
       pendingCalRef.current = false
+      markGyroCalibrated(inp)
       patchPrefs({
         gyroReady: true,
         gyroZeroBeta: inp.gyroBeta,
@@ -326,6 +399,7 @@ export function FlightView({ quality, onHangar }: Props) {
           onPitchMode={togglePitchMode}
           onTilt={toggleTilt}
           onRecalibrate={recalibrate}
+          onPause={() => pauseFlight('Paused')}
         />
       )}
       {tip && !prefs.showHelp && (
@@ -333,6 +407,15 @@ export function FlightView({ quality, onHangar }: Props) {
           First flight: raise <strong>Coll</strong> (right) to lift · left stick = cyclic (spring) ·
           W / stick-up = nose UP (Casual) · stick-left = bank LEFT · yaw springs · coll holds. Tap to
           dismiss.
+        </div>
+      )}
+      {paused && (
+        <div className="pause-overlay" role="dialog" aria-modal="true" aria-label="Flight paused">
+          <div className="pause-card">
+            <strong>Flight paused</strong>
+            <p>{pauseReason || 'Paused'}</p>
+            <button type="button" onClick={resumeFlight}>Resume</button>
+          </div>
         </div>
       )}
       <VirtualControls input={inputRef.current} initialCollective={0.42} />
