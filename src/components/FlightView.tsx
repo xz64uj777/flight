@@ -249,10 +249,9 @@ export function FlightView({ quality, onHangar }: Props) {
         return
       }
 
-      // Drop ready as soon as sustain is lost (single blips never keep ready)
-      if (prefsRef.current.gyroReady) {
-        patchPrefs({ gyroReady: false })
-      }
+      // Keep the calibration across a brief signal dropout. sampleControls already
+      // gates tilt on a live signal, so touch/keyboard take over immediately and
+      // the same sensor can resume without forcing a needless recalibration.
 
       const waited = now - tiltOnAtRef.current
       const anyRecent = gyroIsLive(input, now, GYRO_LIVE_MS)
