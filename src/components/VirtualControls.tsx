@@ -86,10 +86,16 @@ export function VirtualControls({ input, initialCollective = 0.42 }: Props) {
     const max = r.width * 0.42
     let dx = cx - ox
     let dy = cy - oy
-    const mag = Math.hypot(dx, dy) || 1
-    if (mag > max) {
-      dx = (dx / mag) * max
-      dy = (dy / mag) * max
+    if (kind === 'yaw') {
+      // Yaw is horizontal-only. Vertical thumb drift must not weaken pedal authority.
+      dx = Math.max(-max, Math.min(max, dx))
+      dy = 0
+    } else {
+      const mag = Math.hypot(dx, dy) || 1
+      if (mag > max) {
+        dx = (dx / mag) * max
+        dy = (dy / mag) * max
+      }
     }
     const nx = dx / max
     const ny = dy / max
@@ -112,13 +118,15 @@ export function VirtualControls({ input, initialCollective = 0.42 }: Props) {
     e.preventDefault()
     const el = kind === 'cyclic' ? cyclicRef.current : yawRef.current
     if (!el) return
+    const owner = kind === 'cyclic' ? cyclicId : yawId
+    // Do not let a second finger steal an active control.
+    if (owner.current !== null && owner.current !== e.pointerId) return
+    owner.current = e.pointerId
     try {
       el.setPointerCapture(e.pointerId)
     } catch {
       /* ignore */
     }
-    if (kind === 'cyclic') cyclicId.current = e.pointerId
-    else yawId.current = e.pointerId
     moveStick(kind, el, e.clientX, e.clientY)
   }
 
@@ -193,12 +201,14 @@ export function VirtualControls({ input, initialCollective = 0.42 }: Props) {
           aria-label="Collective"
           onPointerDown={(e) => {
             e.preventDefault()
+            // Keep the first finger as owner until release/cancel/lost capture.
+            if (collId.current !== null && collId.current !== e.pointerId) return
+            collId.current = e.pointerId
             try {
               collRef.current?.setPointerCapture(e.pointerId)
             } catch {
               /* ignore */
             }
-            collId.current = e.pointerId
             collMove(e.clientY)
           }}
           onPointerMove={(e) => {
