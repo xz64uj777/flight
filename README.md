@@ -1,46 +1,56 @@
-# Rotorwake Rescue
+# Copter Flight v4
 
-A browser helicopter search-and-rescue game built with React, Three.js, and TanStack Start.
+Phone-friendly helicopter **flight feel** sim (Vite + React + TypeScript + canvas).
 
-## Controls
+Hangar (bird on pad) → **Fly**. No rescue / LifeStar / resume jobs yet.
 
-### Mobile
-- **Tilt phone** — cyclic pitch/bank
-- **Tail L / R** — yaw
-- **Power** — collective
-- **Drag sky** — look around
-- **Calibrate** — zero the phone at the angle you want to hold it
+## Run
 
-Tilt is rest-relative, screen-orientation-aware, and works in portrait or landscape. Yaw remains independent, so you can bank/pitch with the phone while using the tail control at the same time.
+```bash
+cd /workspace/copter-flight
+bun install
+bun run dev
+```
+
+Dev server targets port **8090**.
+
+## How controls work (v4)
+
+| Control | Behavior |
+|---------|----------|
+| **Left stick (cyclic)** | Spring-centers on release / cancel / blur / lost capture. Small deadzone. **Casual default**: screen-up / W → nose **UP**; stick-left → bank **LEFT** (both axes flipped vs Realistic). **Realistic** (opt-in Settings) = heli, screen-up → nose down. |
+| **Yaw stick (right)** | Spring-centers like cyclic. Left = nose left. |
+| **Collective (slider)** | **Absolute hold** — on release keeps last value; knob stays; never snaps to idle. |
+| **Tilt** | Optional phone gyro → cyclic. **OFF by default**. Permission on enable. **Tilt · live** only after sustained motion (≥3 orientation events / 500ms). **Tilt · no signal** sticks with plain hint until live resumes or Tilt OFF (no toast fade). Recalibrate disabled until live. Android absolute-orientation fallback if empty. |
+| **Settings** | Sens Low/Med/High, Casual/Realistic, Tilt + Recalibrate. |
+| **Help** | In-flight panel. First-flight tip dismisses. |
+
+### Verify Casual + sticky Tilt
+
+1. **Casual**: Fly fresh (no Settings toggle). Chase cam — stick-up / **W** → nose **UP**; stick-left / ← → bank **LEFT**.
+2. **Tilt**: Turn Tilt on. A single orientation blip must **not** flash live forever — need sustained events. If no motion: chip stays **Tilt · no signal** + sticky “Phone isn’t sending motion — Chrome + HTTPS + screen unlocked.” until live or OFF. Recalibrate stays disabled until live sticks.
 
 ### Keyboard
-- **W / S** — cyclic forward/back
-- **A / D** — yaw left/right
-- **Q / E** — bank left/right
-- **Space / Shift** — collective up/down
-- **C** — change camera
-- **R** — restart
-- **Esc** — pause
 
-## Development
+| Key | Action |
+|-----|--------|
+| W / S | Cyclic pitch |
+| Left/Right arrows / J L | Cyclic roll |
+| A / D / Q / E | Yaw |
+| R / Space | Collective up |
+| F / Ctrl | Collective down |
+| C | Cycle camera |
+| H | Help |
 
-```bash
-npm ci
-npm run dev
-```
+Hover band ~**72%** collective OGE. Soft rotor loop + wind bed (WebAudio).
 
-Quality checks:
+## Zips
 
-```bash
-npm run typecheck
-npm run build:dev
-```
+Packed without node_modules:
 
-## Recent flight-control fixes
+- `/workspace/copter-drop/copter-flight-v4.zip`
+- `/workspace/shared/copter-flight-v4.zip`
 
-- Independent DeviceOrientation and DeviceMotion calibration so Android event order cannot corrupt tilt zero.
-- Screen-orientation-aware tilt mapping for portrait and landscape.
-- Smoothing and dead zone retained without making yaw feel laggy.
-- Tilt no longer silently re-enables after being switched off.
-- Motion fallback resumes if orientation events stop arriving.
-- Chase camera now follows helicopter yaw while Orbit remains free-look.
+## Stack
+
+Vite 5, React 18, TypeScript, canvas projected 3D (phone-light, no three.js).
