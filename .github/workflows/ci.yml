@@ -27,3 +27,10 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Upload web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: vtol-web-build
+          path: dist
+          if-no-files-found: error
